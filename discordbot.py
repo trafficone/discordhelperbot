@@ -1,7 +1,7 @@
 import random
 import discord
 from discord.ext import commands
-from boardgamegeek import BGGClient
+from boardgamegeek import BGGClient, BGGRestrictSearchResultsTo
 
 
 def get_key(keyfile='.keyfile'):
@@ -10,17 +10,19 @@ def get_key(keyfile='.keyfile'):
     return key
 
 
-def search_boardgame(boardgame):
+def search_boardgame(boardgame, game_type=None):
+    """
+    Uses the boardgamemeek XML API to search for games
+    Currently supports boardgames and TT RPGS
+    """
+    if game_type is None:
+        search_type = None
+        game_type = 'boardgame'
+    elif game_type == 'RPG':
+        game_type = 'rpgitem'
+        search_type = [BGGRestrictSearchResultsTo.RPG]
     bgg = BGGClient()
-    res = bgg.search(boardgame)
-    """
-    res[i].data() = return dict of boardgame data
-    keys are "yearpublished", "id", "name", "type"
-    res[i].name = name of game
-    res[i].id = id number of game (BGG ID)
-    NOTE: BGG URL is https://www.boardgamegeek.com/boardgame/{id}/{name}
-    but name is optional
-    """
+    res = bgg.search(boardgame, search_type=search_type)
     # this is terrible
     if len(res) == 0:
         return "I couldn't find any game similar to the title %s" % boardgame
@@ -28,7 +30,7 @@ def search_boardgame(boardgame):
     games = [x for x in res if boardgame.lower() == x.name.lower()]
     resp = ""
     if len(games) == 0:
-        resp += ("Couldn't find boardgame {} exactly, but I found {} which " +
+        resp += ("Couldn't find game {} exactly, but I found {} which " +
                  "looks close\n").format(boardgame, len(res))
         games = [x for x in res if boardgame.lower() in x.name.lower()]
         if len(games) == 0:
@@ -36,7 +38,8 @@ def search_boardgame(boardgame):
             resp += "but here's the oldest one on the list\n"
             games = res
     g = sorted(games, key=lambda x: x.year)[0]
-    url_format = "https://www.boardgamegeek.com/boardgame/{id}/{name}".format(
+    url_format = "https://www.boardgamegeek.com/{game_tp}/{id}/{name}".format(
+                    game_tp=game_type,
                     id=g.id,
                     name=g.name.lower().replace(' ', '-'))
     return resp+url_format
@@ -68,6 +71,17 @@ async def bg(ctx, *game: str):
 
 
 @bot.command()
+async def rpg(ctx, *game: str):
+    try:
+        bg_url = search_boardgame(' '.join(game), game_type='RPG')
+    except Exception as e:
+        print(e)
+        await ctx.send("Error occurred searching RPG")
+        return
+    await ctx.send(bg_url)
+
+
+@bot.command()
 async def add(ctx, left: int, right: int):
     """Adds two numbers together."""
     await ctx.send(left + right)
@@ -82,7 +96,7 @@ async def roll(ctx, dice: str):
         await ctx.send('Format has to be in NdN!')
         return
 
-    if rolls > 100 or rolls < 0 or limit < 0:
+    if rolls > 100 or rolls < 1 or limit < 1:
         await ctx.send('Invalid roll.')
         return
 
@@ -98,6 +112,8 @@ async def roll(ctx, dice: str):
 @bot.command(description='For when you wanna settle the score some other way')
 async def choose(ctx, *choices: str):
     """Chooses between multiple choices."""
+    print (choices)
+    choices = [x for x in choices if len(x) > 0]
     await ctx.send(random.choice(choices))
 
 
